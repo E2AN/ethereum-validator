@@ -1,0 +1,23 @@
+[Unit]
+Description=Lighthouse Beaconchain
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+{% if not ethv_docker %}
+User=lighthouse-beaconchain
+Group=lighthouse-beaconchain
+{% endif %}
+Restart=always
+RestartSec=5
+ExecStart={{ ethv_lighthouse_beacon_chain_binary }} \
+    --network={{ ethv_20_net }} \
+    --staking \
+    --datadir=/var/lib/lighthouse \
+    --eth1-endpoints={{ ethv_10_http_providers }} \
+    --metrics \
+    --graffiti="{{ ethv_graffiti }}" 
+
+[Install]
+WantedBy=multi-user.target

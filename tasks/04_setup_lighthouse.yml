@@ -1,0 +1,240 @@
+- name: Install dependencies
+  become: yes
+  apt:
+    pkg:
+    - curl
+    - python3-pip
+
+- name: Get Node IP
+  command: curl -s v4.ident.me
+  register: node_ip
+
+- name: Setup lighthouse from binaries
+  become: yes
+  when: not ethv_lighthouse_build_from_source
+  block:
+    - name: Download latest lighthouse release signatures
+      get_url:
+          url: https://github.com/sigp/lighthouse/releases/download/{{ethv_lighthouse_release_version}}/lighthouse-{{ethv_lighthouse_release_version}}-x86_64-unknown-linux-gnu.tar.gz.asc
+          dest: "/tmp/lighthouse-{{ethv_lighthouse_release_version}}-x86_64-unknown-linux-gnu.tar.gz.asc"
+
+    - name: Download latest lighthouse release tarball
+      get_url:
+          url: https://github.com/sigp/lighthouse/releases/download/{{ethv_lighthouse_release_version}}/lighthouse-{{ethv_lighthouse_release_version}}-x86_64-unknown-linux-gnu.tar.gz
+          dest: "/tmp/lighthouse-{{ethv_lighthouse_release_version}}-x86_64-unknown-linux-gnu.tar.gz"
+
+    - name: Check sigmaprime signing key matches what we expect
+      become: yes
+      command: "gpg --verify /tmp/lighthouse-{{ethv_lighthouse_release_version}}-x86_64-unknown-linux-gnu.tar.gz.asc"
+      register: sigmaprime_key_check
+      ignore_errors: yes
+      failed_when:
+        - "'15E66D941F697E28F49381F426416DC3F30674B0' not in sigmaprime_key_check.stdout"
+
+    - name: Extract latest lighthouse release tarball
+      unarchive:
+          src: "/tmp/lighthouse-{{ethv_lighthouse_release_version}}-x86_64-unknown-linux-gnu.tar.gz"
+          dest: /usr/local/bin
+          remote_src: yes
+
+    - name: Test lighthouse works
+      command: lighthouse --version
+      register: lighthouse_test
+      failed_when:
+        - "'Lighthouse v' not in lighthouse_test.stdout"
+
+- name: Build lighthouse from source
+  when: ethv_lighthouse_build_from_source
+  block:
+  - name: Install rust dependencies
+    become: yes
+    shell: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+  - name: Git checkout lighthouse
+    git:
+      repo: "https://github.com/sigp/lighthouse.git"
+      dest: /srv/lighthouse
+      version: "{{ethv_lighthouse_release_version}}"
+
+  - name: Build beacon-chain and validator
+    command:
+      cmd: "make"
+      chdir: /srv/lighthouse
+
+  - name: Check newly built lighthouse binary exists
+    stat: path=/srv/lighthouse
+    register: lighthouse_binary_exists
+
+  - name: "Move newly build lighthouse binary to /usr/local/bin"
+    command: mv /srv/lighthouse/lighthouse /usr/bin/lighthouse
+    when: lighthouse_binary_exists.stat.exists
+
+- name: Add the user lighthouse-beaconchain
+  become: yes
+  user:
+    name: lighthouse-beaconchain
+    create_home: yes
+    comment: lighthouse-beaconchain user with no shell access
+    shell: /bin/false
+
+- name: Create data directory for beacon-chain
+  become: yes
+  file:
+    path: /var/lib/lighthouse/beacon
+    state: directory
+    owner: lighthouse-beaconchain
+    group: lighthouse-beaconchain
+    mode: '0755'
+
+- name: Copy lighthouse-beaconchain.service to remote node
+  become: yes
+  template:
+    src: templates/lighthouse-beaconchain.service.j2
+    dest: /etc/systemd/system/lighthouse-beaconchain.service
+    mode: '0644'
+    owner: root
+    group: root
+  register: service_file_lighthouse_beaconchain
+
+- name: Check if lighthouse-beaconchain is already running
+  become: true
+  command: "systemctl is-active lighthouse-beaconchain"
+  register: service_active_lighthouse_beaconchain
+  ignore_errors: yes
+
+- name: Stop Service to prevent database corruption
+  become: yes
+  command: "systemctl stop lighthouse-beaconchain"
+  when:
+    - service_file_lighthouse_beaconchain.changed
+    - '"inactive" not in service_active_lighthouse_beaconchain.stdout'
+
+- name: Reload systemd
+  become: yes
+  command: "systemctl daemon-reload"
+  when: service_file_lighthouse_beaconchain.changed
+
+- name: Start lighthouse-beaconchain service
+  become: yes
+  command: "systemctl enable --now lighthouse-beaconchain"
+
+# Set up validator
+- name: Add the user lighthouse-validator
+  become: yes
+  user:
+    name: lighthouse-validator
+    create_home: yes
+    comment: lighthouse-validator user with no shell access
+    shell: /bin/false
+
+# Upload validator keys
+- name: Create directory for validator keys
+  become: yes
+  file:
+    path: "/home/lighthouse-validator/.validator_keys"
+    state: directory
+    owner: lighthouse-validator
+    group: lighthouse-validator
+    mode: '0700'
+
+- name: Copy validator_keys to remote node
+  become: yes
+  copy:
+    src: "{{ item }}"
+    dest: "/home/lighthouse-validator/.validator_keys"
+    mode: '0600'
+    owner: lighthouse-validator
+    group: lighthouse-validator
+  with_fileglob:
+    - "files/{{ ethv_validator_keys_folder }}/*"
+
+- name: Create data directory for validator
+  become: yes
+  file:
+    path: "/var/lib/lighthouse/validators"
+    state: directory
+    owner: lighthouse-validator
+    group: lighthouse-validator
+    mode: '0755'
+
+- name: Check if account is already imported
+  become: yes
+  become_user: lighthouse-validator
+  command: "lighthouse account validator list --network {{ ethv_20_net }} --datadir /var/lib/lighthouse"
+  register: accounts_list
+  failed_when:
+    - accounts_list.rc != 0
+    - "'No validator definitions found' not in accounts_list.stderr"
+    - "'Unable to read' in accounts_list.stderr"
+
+- debug:
+    var: accounts_list
+
+- name: Set Account list pubkey fact
+  set_fact:
+    ethv_lighthouse_account_list_pubkey: "{{ accounts_list.stdout | regex_search('(?<=validating public key])(.*)') | trim }}"
+
+- debug:
+    var: ethv_lighthouse_account_list_pubkey
+
+- name: Get deposit_data filename
+  set_fact:
+    deposit_data_filepath: "{{ lookup('fileglob', 'files/{{ ethv_validator_keys_folder }}/deposit_data*.json') }}"
+
+- name: Set Account pubkey fact
+  set_fact:
+    ethv_lighthouse_account_pubkey: "{{ lookup('file', '{{ deposit_data_filepath }}') | from_json | json_query('[0].pubkey') }}"
+
+- debug:
+    var: ethv_lighthouse_account_pubkey
+
+- name: Install pexpect so Ansible can run the next command
+  pip:
+    name: pexpect
+  become: yes
+
+- name: Import validator account
+  become: yes
+  become_user: lighthouse-validator
+  expect:
+    command: "lighthouse --network {{ ethv_20_net }} --datadir /var/lib/lighthouse account validator import --directory /home/lighthouse-validator/.validator_keys"
+    responses:
+      "Enter the keystore password, or press enter to omit it:": "{{ ethv_validator_password }}"
+    timeout: 10
+  # when not already imported
+  when: not ethv_lighthouse_account_pubkey in ethv_lighthouse_account_list_pubkey
+
+# TODO: we should consider stopping or removing the prysm service here if it is running as we share the same keys and we don't want to get slashed
+#       running both clients at once is currently not supported. We should also do the reverse on setup_prysm step if we decide to do it.
+
+- name: Copy lighthouse-validator.service to remote node
+  become: yes
+  template:
+    src: templates/lighthouse-validator.service.j2
+    dest: /etc/systemd/system/lighthouse-validator.service
+    mode: '0644'
+    owner: root
+    group: root
+  register: service_file_lighthouse_validator
+
+- name: Check if lighthouse-validator is already running
+  become: true
+  command: "systemctl is-active lighthouse-validator"
+  register: service_active_lighthouse_validator
+  ignore_errors: yes
+
+- name: Stop Service to prevent database corruption
+  become: yes
+  command: "systemctl stop lighthouse-validator"
+  when:
+    - service_file_lighthouse_validator.changed
+    - '"inactive" not in service_active_lighthouse_validator.stdout'
+
+- name: Reload systemd
+  become: yes
+  command: "systemctl daemon-reload"
+  when: service_file_lighthouse_validator.changed
+
+- name: Start lighthouse-validator service
+  become: yes
+  command: "systemctl enable --now lighthouse-validator"

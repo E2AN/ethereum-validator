@@ -6,8 +6,8 @@ ethereum-validator
 Setup an Ethereum 2.0 validator node for staking with:
 
 - ETH 1.0 client (geth)
-- ETH 2.0 Prysm Beacon Chain
-- ETH 2.0 Prysm Validator
+- ETH 2.0 Prysm Beacon Chain or Lighthouse Beacon Chain
+- ETH 2.0 Prysm Validator or Lighthouse Validator
 - Prometheus (Monitoring API)
 - Grafana (Monitoring Dashboard)
 
@@ -77,7 +77,8 @@ Here's an example:
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
       - /home/$USER/.ethereum:/var/lib/goethereum
-      - /home/$USER/.eth2:/var/lib/prysm
+      - /home/$USER/.eth2_prysm:/var/lib/prysm
+      - /home/$USER/.eth2_lighthouse:/var/lib/lighthouse
 ...
 ```
 
@@ -104,11 +105,20 @@ ethv_number_validators: "1"
 # Geth cache
 ethv_10_cache: "1024"
 
+# The http endpoint for an Ethereum 1.0 node (e.g. infura), this is for prysm only (below is for lighthouse)
+ethv_10_http_provider: "http://127.0.0.1:8545"
+
+# The below is for lighthouse only (the above is for prysm) as it currently supports fallback.
+ethv_10_http_providers: "http://127.0.0.1:8545"
+
 # Ethereum 1.0 Chain network
 ethv_10_net: ""
 
 # Ethereum 2.0 Client network
 ethv_20_net: mainnet
+
+# Which client are we going to use? (prysm | lighthouse)
+ethv_20_client: "prysm"
 
 # Running inside docker requires systemd services to run as root
 # Make sure to set this to "no" if you run on a VM or on bare-metal
@@ -187,6 +197,26 @@ ethv_prysm_pre_start_delay: 780
 
 # The max number of p2p peers to maintain
 ethv_prysm_beacon_chain_maxpeers: 30
+
+#
+# Lighthouse eth2.0 client specific - https://github.com/sigp/lighthouse
+#
+
+# If not built from source, the official releases from github are used
+ethv_lighthouse_build_from_source: no
+
+# Which prebuilt release should we use?
+ethv_lighthouse_release_version: "v1.0.4"
+
+# Path to the beacon-chain binary
+ethv_lighthouse_beacon_chain_binary: "/usr/local/bin/lighthouse bn"
+
+# Path to the validator binary
+ethv_lighthouse_validator_binary: "/usr/local/bin/lighthouse vc"
+
+# Seconds to wait before starting the service
+# This acts as a slashing protection for decreasing the chance to double attestations
+ethv_lighthouse_pre_start_delay: 780
 ```
 
 Dependencies
@@ -210,3 +240,8 @@ Author Information
 ------------------
 
 Maximilian Meister
+
+Contributors
+------------
+
+BlockchainUnchained

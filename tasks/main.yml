@@ -14,6 +14,11 @@
 
 - name: Setup Prysm
   import_tasks: 04_setup_prysm.yml
+  when: ethv_20_client == "prysm"
+
+- name: Setup Lighthouse
+  import_tasks: 04_setup_lighthouse.yml
+  when: ethv_20_client == "lighthouse"
 
 - name: Setup Prometheus
   import_tasks: 05_setup_prometheus.yml

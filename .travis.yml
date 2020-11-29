@@ -27,9 +27,15 @@ script:
   - ansible --version
   # Basic role syntax check
   - ansible-playbook tests/test.yml -i tests/inventory --syntax-check
+  # Run for prysm
   - molecule create
-  - molecule converge -- --extra-vars="ethv_ufw_ipv6='no' ethv_validator_keys_folder='validator_keys_ci' ethv_validator_password='travisci'"
+  - molecule converge -- --extra-vars="ethv_20_client='prysm' ethv_ufw_ipv6='no' ethv_validator_keys_folder='validator_keys_ci' ethv_validator_password='travisci'"
   - molecule destroy
+  # Run for lighthouse
+  - molecule create
+  - molecule converge -- --extra-vars="ethv_20_client='lighthouse' ethv_ufw_ipv6='no' ethv_validator_keys_folder='validator_keys_ci' ethv_validator_password='travisci'"
+  - molecule destroy
+
 
 notifications:
   webhooks: https://galaxy.ansible.com/api/v1/notifications/

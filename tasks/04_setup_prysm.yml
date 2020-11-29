@@ -19,11 +19,11 @@
 
     - name: Download and verify latest beacon-chain binary
       command: prysm.sh beacon-chain --download-only
-      register: download_beaconchain_output
+      register: download_prysm_beaconchain_output
 
     - name: Set beacon-chain binary fact
       set_fact:
-        ethv_prysm_beacon_chain_binary: "{{ download_beaconchain_output.stdout | regex_search('(?<=Verified)(.*)(?=has been signed)') | trim }}"
+        ethv_prysm_beacon_chain_binary: "{{ download_prysm_beaconchain_output.stdout | regex_search('(?<=Verified)(.*)(?=has been signed)') | trim }}"
 
     - name: Download and verify latest validator binary
       command: prysm.sh validator --download-only
@@ -111,25 +111,25 @@
     mode: '0644'
     owner: root
     group: root
-  register: service_file_beaconchain
+  register: service_file_prysm_beaconchain
 
 - name: Check if prysm-beaconchain is already running
   become: true
   command: "systemctl is-active prysm-beaconchain"
-  register: service_active_beaconchain
+  register: service_active_prysm_beaconchain
   ignore_errors: yes
 
 - name: Stop Service to prevent database corruption
   become: yes
   command: "systemctl stop prysm-beaconchain"
   when:
-    - service_file_beaconchain.changed
-    - '"inactive" not in service_active_beaconchain.stdout'
+    - service_file_prysm_beaconchain.changed
+    - '"inactive" not in service_active_prysm_beaconchain.stdout'
 
 - name: Reload systemd
   become: yes
   command: "systemctl daemon-reload"
-  when: service_file_beaconchain.changed
+  when: service_file_prysm_beaconchain.changed
 
 - name: Start prysm-beaconchain service
   become: yes
@@ -234,25 +234,25 @@
     mode: '0644'
     owner: root
     group: root
-  register: service_file_validator
+  register: service_file_prysm_validator
 
 - name: Check if prysm-validator is already running
   become: true
   command: "systemctl is-active prysm-validator"
-  register: service_active_validator
+  register: service_active_prysm_validator
   ignore_errors: yes
 
 - name: Stop Service to prevent database corruption
   become: yes
   command: "systemctl stop prysm-validator"
   when:
-    - service_file_validator.changed
-    - '"inactive" not in service_active_validator.stdout'
+    - service_file_prysm_validator.changed
+    - '"inactive" not in service_active_prysm_validator.stdout'
 
 - name: Reload systemd
   become: yes
   command: "systemctl daemon-reload"
-  when: service_file_validator.changed
+  when: service_file_prysm_validator.changed
 
 - name: Start prysm-validator service
   become: yes

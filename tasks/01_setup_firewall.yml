@@ -29,6 +29,7 @@
 
 - name: Allow Prysm Validator Client TCP
   become: yes
+  when: ethv_20_client == "prysm"
   community.general.ufw:
     rule: allow
     port: '13000'
@@ -36,9 +37,26 @@
 
 - name: Allow Prysm Validator Client UDP
   become: yes
+  when: ethv_20_client == "prysm"
   community.general.ufw:
     rule: allow
     port: '12000'
+    proto: udp
+
+- name: Allow Lighthouse Client TCP
+  become: yes
+  when: ethv_20_client == "lighthouse"
+  community.general.ufw:
+    rule: allow
+    port: '9000'
+    proto: tcp
+
+- name: Allow Lighthouse Client UDP
+  become: yes
+  when: ethv_20_client == "lighthouse"
+  community.general.ufw:
+    rule: allow
+    port: '9000'
     proto: udp
 
 - name: Allow Grafana Monitoring

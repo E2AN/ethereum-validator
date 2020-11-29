@@ -1,0 +1,22 @@
+[Unit]
+Description=Lighthouse Validator
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+{% if not ethv_docker %}
+User=lighthouse-validator
+Group=lighthouse-validator
+{% endif %}
+Restart=always
+RestartSec=5
+TimeoutSec=infinity
+ExecStartPre=/bin/sleep {{ ethv_lighthouse_pre_start_delay }}
+ExecStart={{ ethv_lighthouse_validator_binary }} \
+    --network={{ ethv_20_net }} \
+    --datadir=/var/lib/lighthouse \
+    --metrics
+
+[Install]
+WantedBy=multi-user.target

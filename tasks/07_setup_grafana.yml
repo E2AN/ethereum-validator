@@ -148,4 +148,22 @@
       dashboard: "{{ lookup('file', 'grafana/geth/dashboard-karalabe.json') }}"
       overwrite: true
     body_format: json
+    status_code: 200
     validate_certs: false
+  when: ethv_20_client == "prysm"
+
+- name: Upload Lighthouse Dashboards
+  uri:
+    url: http://localhost:3000/api/dashboards/db
+    method: POST
+    headers:
+      Authorization: "Bearer {{ grafana_auth.json.key }}"
+      Content-Type: application/json
+    body:
+      dashboard: "{{ lookup('file', item) }}"
+      overwrite: true
+    body_format: json
+    status_code: 200
+    validate_certs: false
+  when: ethv_20_client == "lighthouse"
+  with_fileglob: 'grafana_lighthouse/*.json'
