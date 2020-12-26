@@ -119,7 +119,7 @@ ethv_prysm_beacon_chain_maxpeers: 30
 ethv_lighthouse_build_from_source: no
 
 # Which prebuilt release should we use?
-ethv_lighthouse_release_version: "v1.0.4"
+ethv_lighthouse_release_version: "v1.0.5"
 
 # Path to the beacon-chain binary
 ethv_lighthouse_beacon_chain_binary: "/usr/local/bin/lighthouse bn"
